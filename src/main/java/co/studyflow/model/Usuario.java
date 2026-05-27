@@ -37,6 +37,9 @@ public class Usuario {
     @Column(name = "ultima_conexion")
     private LocalDateTime ultimaConexion;
 
+    @Column(name = "password_hash")
+    private String passwordHash;
+
     @Column(name = "algoritmo_default")
     @Enumerated(EnumType.STRING)
     private TipoAlgoritmo algoritmoPorDefecto;

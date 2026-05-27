@@ -4,7 +4,10 @@ import co.studyflow.dto.ProgresoDTO;
 import co.studyflow.service.ProgresoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 /**
  * Controlador REST para estadísticas y progreso
@@ -13,10 +16,10 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/progreso")
 @CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "https://*.vercel.app"})
 public class ProgresoController {
-    
+
     @Autowired
     private ProgresoService progresoService;
-    
+
     /**
      * GET /api/progreso/{mazoId} - Obtener progreso de un mazo
      */
@@ -25,15 +28,13 @@ public class ProgresoController {
         ProgresoDTO progreso = progresoService.obtenerProgresoPorMazo(mazoId);
         return ResponseEntity.ok(progreso);
     }
-    
+
     /**
-     * GET /api/progreso/globales - Obtener estadísticas globales
+     * GET /api/progreso/globales - Obtener estadísticas globales del usuario autenticado
      */
     @GetMapping("/globales")
-    public ResponseEntity<java.util.Map<String, Object>> obtenerGlobales(
-            @RequestHeader("X-Usuario-Id") String usuarioId
-    ) {
-        java.util.Map<String, Object> stats = progresoService.obtenerEstadisticasGlobales(usuarioId);
+    public ResponseEntity<Map<String, Object>> obtenerGlobales(Authentication auth) {
+        Map<String, Object> stats = progresoService.obtenerEstadisticasGlobales(auth.getName());
         return ResponseEntity.ok(stats);
     }
 }

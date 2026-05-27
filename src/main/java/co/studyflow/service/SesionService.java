@@ -42,7 +42,7 @@ public class SesionService {
     private ProgresoObserverManager observerManager;
 
     public Sesion iniciarSesion(String mazoId, String usuarioId) {
-        Mazo mazo = mazoRepository.findById(mazoId)
+        Mazo mazo = mazoRepository.findByIdAndUsuarioId(mazoId, usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Mazo no encontrado"));
 
         Usuario usuario = usuarioRepository.findById(usuarioId)

@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -27,48 +28,43 @@ import java.util.stream.Collectors;
 @RequestMapping("/mazos")
 @CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "https://*.vercel.app"})
 public class MazoController {
-    
+
     @Autowired
     private MazoService mazoService;
     @Autowired
     private TarjetaService tarjetaService;
-    
+
     /**
      * GET /api/mazos - Obtener todos los mazos del usuario
      */
     @GetMapping
-    public ResponseEntity<List<MazoDTO>> obtenerTodos(@RequestHeader("X-Usuario-Id") String usuarioId) {
+    public ResponseEntity<List<MazoDTO>> obtenerTodos(Authentication auth) {
+        String usuarioId = auth.getName();
         List<Mazo> mazos = mazoService.obtenerMazosDelUsuario(usuarioId);
         List<MazoDTO> dtos = mazos.stream()
                 .map(EntityMapper::toMazoDTO)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(dtos);
     }
-    
+
     /**
      * GET /api/mazos/{id} - Obtener mazo específico
      */
     @GetMapping("/{id}")
-    public ResponseEntity<MazoDTO> obtenerPorId(
-            @PathVariable String id,
-            @RequestHeader("X-Usuario-Id") String usuarioId
-    ) {
-        Mazo mazo = mazoService.obtenerPorId(id, usuarioId);
+    public ResponseEntity<MazoDTO> obtenerPorId(@PathVariable String id, Authentication auth) {
+        Mazo mazo = mazoService.obtenerPorId(id, auth.getName());
         return ResponseEntity.ok(EntityMapper.toMazoDTO(mazo));
     }
-    
+
     /**
      * POST /api/mazos - Crear nuevo mazo
      */
     @PostMapping
-    public ResponseEntity<MazoDTO> crear(
-            @RequestBody MazoDTO mazoDTO,
-            @RequestHeader("X-Usuario-Id") String usuarioId
-    ) {
-        Mazo mazo = mazoService.crear(mazoDTO, usuarioId);
+    public ResponseEntity<MazoDTO> crear(@RequestBody MazoDTO mazoDTO, Authentication auth) {
+        Mazo mazo = mazoService.crear(mazoDTO, auth.getName());
         return ResponseEntity.status(201).body(EntityMapper.toMazoDTO(mazo));
     }
-    
+
     /**
      * PUT /api/mazos/{id} - Actualizar mazo
      */
@@ -76,36 +72,30 @@ public class MazoController {
     public ResponseEntity<MazoDTO> actualizar(
             @PathVariable String id,
             @RequestBody MazoDTO mazoDTO,
-            @RequestHeader("X-Usuario-Id") String usuarioId
+            Authentication auth
     ) {
-        Mazo mazo = mazoService.actualizar(id, mazoDTO, usuarioId);
+        Mazo mazo = mazoService.actualizar(id, mazoDTO, auth.getName());
         return ResponseEntity.ok(EntityMapper.toMazoDTO(mazo));
     }
-    
+
     /**
      * DELETE /api/mazos/{id} - Eliminar mazo
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminar(
-            @PathVariable String id,
-            @RequestHeader("X-Usuario-Id") String usuarioId
-    ) {
-        mazoService.eliminar(id, usuarioId);
+    public ResponseEntity<Void> eliminar(@PathVariable String id, Authentication auth) {
+        mazoService.eliminar(id, auth.getName());
         return ResponseEntity.noContent().build();
     }
-    
+
     /**
      * POST /api/mazos/{id}/duplicar - Duplicar mazo
      */
     @PostMapping("/{id}/duplicar")
-    public ResponseEntity<MazoDTO> duplicar(
-            @PathVariable String id,
-            @RequestHeader("X-Usuario-Id") String usuarioId
-    ) {
-        Mazo mazoDuplicado = mazoService.duplicar(id, usuarioId);
+    public ResponseEntity<MazoDTO> duplicar(@PathVariable String id, Authentication auth) {
+        Mazo mazoDuplicado = mazoService.duplicar(id, auth.getName());
         return ResponseEntity.status(201).body(EntityMapper.toMazoDTO(mazoDuplicado));
     }
-    
+
     /**
      * POST /api/mazos/{id}/exportar - Exportar mazo
      */
@@ -113,34 +103,32 @@ public class MazoController {
     public ResponseEntity<byte[]> exportar(
             @PathVariable String id,
             @RequestParam(defaultValue = "json") String formato,
-            @RequestHeader("X-Usuario-Id") String usuarioId
+            Authentication auth
     ) throws IOException {
-        Mazo mazo = mazoService.obtenerPorId(id, usuarioId);
-        
-        // Usar patrón Abstract Factory
+        Mazo mazo = mazoService.obtenerPorId(id, auth.getName());
+
         Exportador exportador = ExportadorFactory.crearExportador(formato);
-        
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         exportador.exportar(mazo.getTarjetas(), output);
-        
+
         byte[] data = output.toByteArray();
         String nombreArchivo = exportador.obtenerNombreArchivo(mazo.getNombre());
-        
+
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nombreArchivo + "\"")
                 .contentType(MediaType.parseMediaType(exportador.obtenerTipoContenido()))
                 .body(data);
     }
-    
+
     /**
      * POST /api/mazos/importar - Importar mazo desde archivo
      */
     @PostMapping("/importar")
     public ResponseEntity<MazoDTO> importar(
             @RequestParam MultipartFile archivo,
-            @RequestHeader("X-Usuario-Id") String usuarioId
+            Authentication auth
     ) throws IOException {
-        // Soportar importación de JSON con array de tarjetas: [{"frente":"...","reverso":"..."}, ...]
+        String usuarioId = auth.getName();
         String content = new String(archivo.getBytes(), StandardCharsets.UTF_8).trim();
         com.google.gson.Gson gson = new com.google.gson.GsonBuilder()
             .registerTypeAdapter(java.time.LocalDateTime.class, new co.studyflow.util.LocalDateTimeAdapter())
@@ -157,7 +145,6 @@ public class MazoController {
                     tarjetasDto.add(dto);
                 }
             } else if (el.isJsonObject()) {
-                // Soporta objeto con campo "tarjetas": [...]
                 com.google.gson.JsonObject obj = el.getAsJsonObject();
                 if (obj.has("tarjetas") && obj.get("tarjetas").isJsonArray()) {
                     com.google.gson.JsonArray arr = obj.getAsJsonArray("tarjetas");
@@ -175,32 +162,21 @@ public class MazoController {
             throw new IOException("No se encontraron tarjetas en el archivo");
         }
 
-        // Establecer mazo destino: usar el primer campo mazoId si viene, o crear uno nuevo
         String mazoId = tarjetasDto.get(0).getMazoId();
         if (mazoId == null || mazoId.isBlank()) {
             throw new IllegalArgumentException("El archivo debe contener 'mazoId' en las tarjetas o indicar el mazo destino");
         }
 
-        // Asegurar que el mazo existe y pertenece al usuario
         co.studyflow.model.Mazo mazo = mazoService.obtenerPorId(mazoId, usuarioId);
 
-        // Asegurar mazoId en cada DTO
         tarjetasDto.forEach(t -> t.setMazoId(mazo.getId()));
-
-        // Valores por defecto para campos opcionales que pueden venir nulos
         tarjetasDto.forEach(t -> {
-            if (t.getConPista() == null) {
-                t.setConPista(false);
-            }
-            if (t.getEtiquetas() == null) {
-                t.setEtiquetas(new java.util.ArrayList<>());
-            }
+            if (t.getConPista() == null) t.setConPista(false);
+            if (t.getEtiquetas() == null) t.setEtiquetas(new java.util.ArrayList<>());
         });
 
-        // Crear tarjetas
         tarjetaService.crearMultiples(mazo.getId(), tarjetasDto);
 
-        // Devolver mazo actualizado
         MazoDTO actualizado = EntityMapper.toMazoDTO(mazoService.obtenerPorId(mazo.getId(), usuarioId));
         return ResponseEntity.status(201).body(actualizado);
     }

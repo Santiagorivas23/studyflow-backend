@@ -81,8 +81,8 @@ public class GeminiHttpClient {
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 String errorBody = response.body() != null ? response.body().string() : "Unknown error";
-                logger.error("Error en Gemini API: {} - {}", response.code(), errorBody);
-                throw new IOException("Error en Gemini API: " + response.code());
+                logger.error("Error en Gemini API: HTTP {} - Body: {}", response.code(), errorBody);
+                throw new IOException("Error en Gemini API HTTP " + response.code() + ": " + errorBody);
             }
             
             String responseBody = response.body().string();
