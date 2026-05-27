@@ -4,6 +4,7 @@ import co.studyflow.dto.ProgresoDTO;
 import co.studyflow.exception.ResourceNotFoundException;
 import co.studyflow.model.Mazo;
 import co.studyflow.model.Tarjeta;
+import co.studyflow.patterns.composite.ColeccionMazos;
 import co.studyflow.repository.MazoRepository;
 import co.studyflow.repository.SesionRepository;
 import co.studyflow.repository.TarjetaRepository;
@@ -99,14 +100,10 @@ public class ProgresoService {
         public java.util.Map<String, Object> obtenerEstadisticasGlobales(String usuarioId) {
                 java.util.Map<String, Object> stats = new java.util.HashMap<>();
 
-                // Mazos del usuario
-                java.util.List<Mazo> mazos = mazoRepository.findByUsuarioId(usuarioId);
-                int totalMazos = mazos.size();
-
-                // Total tarjetas
-                int totalTarjetas = mazos.stream()
-                                .mapToInt(m -> m.getTotalTarjetas() != null ? m.getTotalTarjetas() : 0)
-                                .sum();
+                // Mazos del usuario — usar Composite para agregar métricas
+                ColeccionMazos coleccion = new ColeccionMazos(mazoRepository.findByUsuarioId(usuarioId));
+                int totalMazos = coleccion.getTotalMazos();
+                int totalTarjetas = coleccion.getTotalTarjetas();
 
                 // Racha actual
                 int rachaActual = calcularRacha(usuarioId);
