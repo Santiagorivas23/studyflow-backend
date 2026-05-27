@@ -67,7 +67,13 @@ public class GeminiHttpClient {
         contents.add(content);
         
         payload.add("contents", contents);
-        
+
+        // Configurar variabilidad para evitar respuestas cacheadas/idénticas entre llamadas
+        JsonObject generationConfig = new JsonObject();
+        generationConfig.addProperty("temperature", 0.9);
+        generationConfig.addProperty("topP", 0.95);
+        payload.add("generationConfig", generationConfig);
+
         // Configurar solicitud
         String urlConKey = apiUrl + "?key=" + apiKey;
         Request request = new Request.Builder()
