@@ -8,7 +8,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
+import co.studyflow.dto.TarjetaDTO;
 import co.studyflow.model.Tarjeta;
+import co.studyflow.util.EntityMapper;
 import co.studyflow.util.LocalDateTimeAdapter;
 
 /**
@@ -22,7 +25,12 @@ public class ExportadorJSON implements Exportador {
     
     @Override
     public void exportar(List<Tarjeta> tarjetas, OutputStream output) throws IOException {
-        String json = gson.toJson(tarjetas);
+        // Mapear a DTO para evitar serializar proxies de Hibernate y romper la
+        // referencia circular Tarjeta -> Mazo -> Tarjeta
+        List<TarjetaDTO> dtos = tarjetas.stream()
+                .map(EntityMapper::toTarjetaDTO)
+                .collect(Collectors.toList());
+        String json = gson.toJson(dtos);
         try (OutputStreamWriter writer = new OutputStreamWriter(output, StandardCharsets.UTF_8)) {
             writer.write(json);
             writer.flush();
