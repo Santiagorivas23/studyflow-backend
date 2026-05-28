@@ -1,14 +1,19 @@
 package co.studyflow.controller;
 
 import co.studyflow.dto.MazoDTO;
+import co.studyflow.exception.ResourceNotFoundException;
 import co.studyflow.model.Mazo;
+import co.studyflow.model.Tarjeta;
 import co.studyflow.patterns.factory.Exportador;
 import co.studyflow.patterns.factory.ExportadorFactory;
 import co.studyflow.service.MazoService;
 import co.studyflow.service.TarjetaService;
 import co.studyflow.util.EntityMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -28,6 +33,8 @@ import java.util.stream.Collectors;
 @RequestMapping("/mazos")
 @CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "https://*.vercel.app"})
 public class MazoController {
+
+    private static final Logger logger = LoggerFactory.getLogger(MazoController.class);
 
     @Autowired
     private MazoService mazoService;
@@ -100,37 +107,61 @@ public class MazoController {
      * GET/POST /api/mazos/{id}/exportar - Exportar mazo
      */
     @GetMapping("/{id}/exportar")
-    public ResponseEntity<byte[]> exportarGet(
+    public ResponseEntity<?> exportarGet(
             @PathVariable String id,
             @RequestParam(defaultValue = "json") String formato,
             Authentication auth
-    ) throws IOException {
+    ) {
         return exportarMazo(id, formato, auth);
     }
 
     @PostMapping("/{id}/exportar")
-    public ResponseEntity<byte[]> exportar(
+    public ResponseEntity<?> exportar(
             @PathVariable String id,
             @RequestParam(defaultValue = "json") String formato,
             Authentication auth
-    ) throws IOException {
+    ) {
         return exportarMazo(id, formato, auth);
     }
 
-    private ResponseEntity<byte[]> exportarMazo(String id, String formato, Authentication auth) throws IOException {
-        Mazo mazo = mazoService.obtenerPorId(id, auth.getName());
+    private ResponseEntity<?> exportarMazo(String id, String formato, Authentication auth) {
+        String usuarioId = (auth != null) ? auth.getName() : null;
+        logger.info("Exportar mazo {} formato={} usuario={}", id, formato, usuarioId);
 
-        Exportador exportador = ExportadorFactory.crearExportador(formato);
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        exportador.exportar(mazo.getTarjetas(), output);
+        if (usuarioId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("Token JWT ausente o inválido");
+        }
 
-        byte[] data = output.toByteArray();
-        String nombreArchivo = exportador.obtenerNombreArchivo(mazo.getNombre());
+        try {
+            Mazo mazo = mazoService.obtenerPorId(id, usuarioId);
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nombreArchivo + "\"")
-                .contentType(MediaType.parseMediaType(exportador.obtenerTipoContenido()))
-                .body(data);
+            // Cargar tarjetas explícitamente para evitar LazyInitializationException
+            // (la colección Mazo.tarjetas es LAZY y la sesión Hibernate ya está cerrada)
+            List<Tarjeta> tarjetas = tarjetaService.obtenerPorMazo(mazo.getId());
+
+            Exportador exportador = ExportadorFactory.crearExportador(formato);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            exportador.exportar(tarjetas, output);
+
+            byte[] data = output.toByteArray();
+            String nombreArchivo = exportador.obtenerNombreArchivo(mazo.getNombre());
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nombreArchivo + "\"")
+                    .contentType(MediaType.parseMediaType(exportador.obtenerTipoContenido()))
+                    .body(data);
+        } catch (ResourceNotFoundException e) {
+            logger.warn("Mazo no encontrado al exportar {}: {}", id, e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            logger.warn("Parámetro inválido al exportar mazo {}: {}", id, e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        } catch (Exception e) {
+            logger.error("Error al exportar mazo {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error al exportar: " + e.getMessage());
+        }
     }
 
     /**
