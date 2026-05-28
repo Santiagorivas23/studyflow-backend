@@ -165,7 +165,77 @@ public class MazoController {
     }
 
     /**
-     * POST /api/mazos/importar - Importar mazo desde archivo
+     * POST /api/mazos/{id}/importar - Importar tarjetas a un mazo (body JSON)
+     * Acepta el mismo formato que produce el endpoint /exportar.
+     */
+    @PostMapping(value = "/{id}/importar", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> importarPorMazo(
+            @PathVariable String id,
+            @RequestBody String body,
+            Authentication auth
+    ) {
+        String usuarioId = (auth != null) ? auth.getName() : null;
+        logger.info("Importar tarjetas a mazo {} usuario={}", id, usuarioId);
+        if (usuarioId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token JWT ausente o inválido");
+        }
+        try {
+            return ResponseEntity.status(201).body(procesarImportacion(id, body, usuarioId));
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        } catch (IllegalArgumentException | IOException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        } catch (Exception e) {
+            logger.error("Error al importar mazo {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error al importar: " + e.getMessage());
+        }
+    }
+
+    private MazoDTO procesarImportacion(String mazoId, String content, String usuarioId) throws IOException {
+        Mazo mazo = mazoService.obtenerPorId(mazoId, usuarioId);
+        List<co.studyflow.dto.TarjetaDTO> tarjetasDto = parsearTarjetasJson(content);
+        if (tarjetasDto.isEmpty()) {
+            throw new IOException("No se encontraron tarjetas en el archivo");
+        }
+        tarjetasDto.forEach(t -> {
+            t.setMazoId(mazo.getId());
+            if (t.getConPista() == null) t.setConPista(false);
+            if (t.getEtiquetas() == null) t.setEtiquetas(new java.util.ArrayList<>());
+        });
+        tarjetaService.crearMultiples(mazo.getId(), tarjetasDto);
+        return EntityMapper.toMazoDTO(mazoService.obtenerPorId(mazo.getId(), usuarioId));
+    }
+
+    private List<co.studyflow.dto.TarjetaDTO> parsearTarjetasJson(String content) throws IOException {
+        com.google.gson.Gson gson = new com.google.gson.GsonBuilder()
+                .registerTypeAdapter(java.time.LocalDateTime.class, new co.studyflow.util.LocalDateTimeAdapter())
+                .create();
+        List<co.studyflow.dto.TarjetaDTO> tarjetasDto = new java.util.ArrayList<>();
+        try {
+            com.google.gson.JsonElement el = gson.fromJson(content.trim(), com.google.gson.JsonElement.class);
+            com.google.gson.JsonArray arr = null;
+            if (el.isJsonArray()) {
+                arr = el.getAsJsonArray();
+            } else if (el.isJsonObject()) {
+                com.google.gson.JsonObject obj = el.getAsJsonObject();
+                if (obj.has("tarjetas") && obj.get("tarjetas").isJsonArray()) {
+                    arr = obj.getAsJsonArray("tarjetas");
+                }
+            }
+            if (arr != null) {
+                for (com.google.gson.JsonElement e : arr) {
+                    tarjetasDto.add(gson.fromJson(e, co.studyflow.dto.TarjetaDTO.class));
+                }
+            }
+        } catch (Exception ex) {
+            throw new IOException("Formato de archivo inválido: " + ex.getMessage(), ex);
+        }
+        return tarjetasDto;
+    }
+
+    /**
+     * POST /api/mazos/importar - Importar mazo desde archivo (multipart)
      */
     @PostMapping("/importar")
     public ResponseEntity<MazoDTO> importar(
