@@ -97,14 +97,27 @@ public class MazoController {
     }
 
     /**
-     * POST /api/mazos/{id}/exportar - Exportar mazo
+     * GET/POST /api/mazos/{id}/exportar - Exportar mazo
      */
+    @GetMapping("/{id}/exportar")
+    public ResponseEntity<byte[]> exportarGet(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "json") String formato,
+            Authentication auth
+    ) throws IOException {
+        return exportarMazo(id, formato, auth);
+    }
+
     @PostMapping("/{id}/exportar")
     public ResponseEntity<byte[]> exportar(
             @PathVariable String id,
             @RequestParam(defaultValue = "json") String formato,
             Authentication auth
     ) throws IOException {
+        return exportarMazo(id, formato, auth);
+    }
+
+    private ResponseEntity<byte[]> exportarMazo(String id, String formato, Authentication auth) throws IOException {
         Mazo mazo = mazoService.obtenerPorId(id, auth.getName());
 
         Exportador exportador = ExportadorFactory.crearExportador(formato);
